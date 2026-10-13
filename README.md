@@ -1,4 +1,3 @@
-=======
 # sixb6t-login-bot
 
 A Minecraft bot for [6b6t.org](https://6b6t.org) that logs a cracked account in, gets it through the lobby/queue to the main server, and keeps it connected. It can also click a configured trapdoor on demand, either from a chat trigger or from the console.
