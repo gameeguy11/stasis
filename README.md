@@ -126,4 +126,3 @@ MIT. Original work Copyright (c) 2024 EnderKill98. See [LICENSE](LICENSE).
 
 [discord]: https://discord.gg/HX6rSFg3k
 [vidget-discord]: https://invidget.switchblade.xyz/fdHkyVYc8
->>>>>>> 160cc57 (making it pub)
