@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 /.idea/
 /target
 
@@ -6,3 +7,15 @@
 /stasis-config.json
 /login-secrets.json
 /seen.json
+=======
+/target
+/.idea/
+/sixb6t-config.json
+/.vscode/
+/sixb6t-config*.json
+/*.json.bak
+.cargo-ok
+Cargo.toml.orig
+.cargo_vcs_info.json
+*.log
+>>>>>>> 160cc57 (making it pub)
