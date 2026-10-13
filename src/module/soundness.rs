@@ -1,0 +1,344 @@
+use crate::module::Module;
+use crate::task::Task;
+use crate::task::group::TaskGroup;
+use crate::{BotState, OPTS, entity_util};
+use azalea::core::game_type::GameMode;
+use azalea::protocol::packets::game::ClientboundGamePacket;
+use azalea::protocol::packets::game::c_damage_event::OptionalEntityId;
+use azalea::world::MinecraftEntityId;
+use azalea::{Client, Event, ResourceLocation};
+use parking_lot::Mutex;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
+use tokio::time::Instant;
+
+// Used when --use-hardcoded-damage-types is specified
+#[rustfmt::skip]
+const DAMAGE_TYPES: &[&'static str] = &[
+    "arrow", "bad_respawn_point", "cactus", "campfire", "cramming", "dragon_breath", "drown", "dry_out", "ender_pearl", "explosion", "fall", "falling_anvil",
+    "falling_block", "falling_stalactite", "fireball", "fireworks", "fly_into_wall", "freeze", "generic", "generic_kill", "hot_floor", "in_fire", "in_wall",
+    "indirect_magic", "lava", "lightning_bolt", "mace_smash", "magic", "mob_attack", "mob_attack_no_aggro", "mob_projectile", "on_fire", "out_of_world",
+    "outside_border", "player_attack", "player_explosion", "sonic_boom", "spit", "stalagmite", "starve", "sting", "sweet_berry_bush", "thorns", "thrown",
+    "trident", "unattributed_fireball", "wind_charge", "wither", "wither_skull",
+];
+
+#[derive(Clone, Eq, PartialEq)]
+pub enum InGameStatus {
+    Disconnected,
+    InLimbo {
+        title: Option<String>,
+        subtitle: Option<String>,
+        action: Option<String>,
+    },
+    InGame {
+        when: Instant,
+    },
+}
+
+impl Default for InGameStatus {
+    fn default() -> Self {
+        Self::Disconnected
+    }
+}
+
+#[derive(Clone, Default)]
+pub struct SoundnessModule {
+    pub status: Arc<Mutex<InGameStatus>>,
+    pub last_damage_event: Arc<Mutex<Option<(Instant, String)>>>,
+    pub interrupt_next_tick: Arc<AtomicBool>,
+    pub queue_next_tick: Arc<AtomicBool>,
+}
+
+impl SoundnessModule {
+    fn update_status(&self, bot_state: &BotState, new_status: InGameStatus) {
+        let mut old_status = self.status.lock();
+        if *old_status != new_status {
+            match new_status {
+                InGameStatus::Disconnected => {
+                    if bot_state.webhook.is_some() {
+                        bot_state.webhook("`🔴` Disconnected!");
+                    } else {
+                        info!("Disconnected!")
+                    }
+                }
+                InGameStatus::InLimbo {
+                    ref title,
+                    ref subtitle,
+                    ref action,
+                } => {
+                    if let Some(title) = title {
+                        if bot_state.webhook.is_some() {
+                            bot_state.webhook(format!("`🟣` In Limbo: {title}"));
+                        } else {
+                            info!("In Limbo: {title}");
+                        }
+                    } else if let Some(subtitle) = subtitle {
+                        if bot_state.webhook.is_some() {
+                            bot_state.webhook(format!("`🟣` In Limbo: {subtitle}"));
+                        } else {
+                            info!("In Limbo: {subtitle}");
+                        }
+                    } else if let Some(action) = action {
+                        if bot_state.webhook.is_some() {
+                            bot_state.webhook(format!("`🟣` In Limbo: {action}"));
+                        } else {
+                            info!("In Limbo: {action}");
+                        }
+                    } else {
+                        if bot_state.webhook.is_some() {
+                            bot_state.webhook("`🟣` In Limbo!");
+                        } else {
+                            info!("In Limbo!")
+                        }
+                        if OPTS.queue_command.is_some() {
+                            info!("Running queue command next tick...");
+                            self.queue_next_tick.store(true, Ordering::Relaxed);
+                        }
+                    }
+                }
+                InGameStatus::InGame { .. } => {
+                    if bot_state.webhook.is_some() {
+                        bot_state.webhook("`🟢` In Game!");
+                    } else {
+                        info!("In Game!");
+                    }
+                }
+            }
+            *old_status = new_status;
+        }
+    }
+
+    fn interrupt(&self, bot: &mut Client, bot_state: &BotState) -> anyhow::Result<()> {
+        info!("Interrupted. Cleaning all tasks!");
+        bot_state.webhook("`✋` Interrupted. Cleaning all tasks...");
+        let mut root_task_group = bot_state.root_task_group.lock();
+        root_task_group.discard(bot.clone(), bot_state)?;
+        *root_task_group = TaskGroup::new_root();
+        Ok(())
+    }
+
+    pub fn is_ingame(&self) -> bool {
+        matches!(*self.status.lock(), InGameStatus::InGame { .. })
+    }
+
+    pub fn is_ingame_for(&self, min_duration: Duration) -> bool {
+        if let InGameStatus::InGame { when } = *self.status.lock() {
+            when.elapsed() >= min_duration
+        } else {
+            false
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl Module for SoundnessModule {
+    fn name(&self) -> &'static str {
+        "Soundness"
+    }
+
+    async fn handle(&self, mut bot: Client, event: &Event, bot_state: &BotState) -> anyhow::Result<()> {
+        match event {
+            Event::Init => bot_state.webhook("`👋` Initializing..."),
+            Event::Login => bot_state.webhook("`🔵` Logged in!"),
+            Event::Spawn => bot_state.webhook("`🎮`️ Spawned!"),
+            Event::Disconnect(reason) => {
+                if let Some(reason) = reason {
+                    bot_state.webhook(format!("`👞` Kick: {reason}"));
+                }
+                if matches!(*self.status.lock(), InGameStatus::Disconnected) {
+                    self.interrupt_next_tick.store(true, Ordering::Relaxed);
+                    //self.interrupt(&mut bot, bot_state)?;
+                }
+                self.update_status(bot_state, InGameStatus::Disconnected);
+            }
+            Event::Packet(packet) => match packet.as_ref() {
+                ClientboundGamePacket::Login(packet) => {
+                    if packet.common.game_type == GameMode::Spectator || packet.common.game_type == GameMode::Adventure {
+                        if matches!(*self.status.lock(), InGameStatus::Disconnected | InGameStatus::InGame { .. }) {
+                            self.interrupt_next_tick.store(true, Ordering::Relaxed);
+                            //self.interrupt(&mut bot, bot_state)?;
+                        }
+                        self.update_status(
+                            &bot_state,
+                            InGameStatus::InLimbo {
+                                title: None,
+                                subtitle: None,
+                                action: None,
+                            },
+                        );
+                    } else {
+                        self.update_status(&bot_state, InGameStatus::InGame { when: Instant::now() });
+                    }
+                }
+                ClientboundGamePacket::SetTitleText(packet) => {
+                    debug!("Title Text: {}", packet.text);
+                    let status = self.status.lock().clone();
+                    if let InGameStatus::InLimbo { subtitle, .. } = status {
+                        let title = packet.text.to_string();
+                        self.update_status(
+                            &bot_state,
+                            InGameStatus::InLimbo {
+                                title: if title.is_empty() { None } else { Some(title) },
+                                subtitle,
+                                action: None, // Clear
+                            },
+                        );
+                    }
+                }
+                ClientboundGamePacket::SetSubtitleText(packet) => {
+                    debug!("Subttitle Text: {}", packet.text);
+                    let status = self.status.lock().clone();
+                    if let InGameStatus::InLimbo { title, .. } = status {
+                        let subtitle = packet.text.to_string();
+                        self.update_status(
+                            &bot_state,
+                            InGameStatus::InLimbo {
+                                title,
+                                subtitle: if subtitle.is_empty() { None } else { Some(subtitle) },
+                                action: None, // Clear
+                            },
+                        );
+                    }
+                }
+                ClientboundGamePacket::SetActionBarText(packet) => {
+                    debug!("Action Text: {}", packet.text.to_string());
+                    let status = self.status.lock().clone();
+                    if let InGameStatus::InLimbo { title, subtitle, .. } = status {
+                        let action = packet.text.to_string();
+                        if title.is_none() && subtitle.is_none() {
+                            // Only use if no title, nor subtitle
+                            // Used by RealmSMP / AJQueue
+                            self.update_status(
+                                &bot_state,
+                                InGameStatus::InLimbo {
+                                    title,
+                                    subtitle,
+                                    action: if action.is_empty() { None } else { Some(action) },
+                                },
+                            );
+                        }
+                    }
+                }
+                ClientboundGamePacket::Respawn(packet) => {
+                    if packet.common.game_type == GameMode::Spectator || packet.common.game_type == GameMode::Adventure {
+                        if matches!(*self.status.lock(), InGameStatus::Disconnected | InGameStatus::InGame { .. }) {
+                            self.interrupt_next_tick.store(true, Ordering::Relaxed);
+                            //self.interrupt(&mut bot, bot_state)?;
+                        }
+                        self.update_status(
+                            &bot_state,
+                            InGameStatus::InLimbo {
+                                title: None,
+                                subtitle: None,
+                                action: None,
+                            },
+                        );
+                    } else {
+                        if !matches!(*self.status.lock(), InGameStatus::InGame { .. }) {
+                            self.update_status(&bot_state, InGameStatus::InGame { when: Instant::now() });
+                        }
+                    }
+                }
+                ClientboundGamePacket::EntityEvent(packet) => {
+                    let my_entity_id = bot.entity_component::<MinecraftEntityId>(bot.entity).0;
+                    if packet.entity_id.0 == my_entity_id && packet.event_id == 35 {
+                        info!("I popped a Totem!");
+                    }
+                }
+                ClientboundGamePacket::SetHealth(packet) => {
+                    info!(
+                        "Health: {:.02}, Food: {:.02}, Saturation: {:.02}",
+                        packet.health, packet.food, packet.saturation
+                    );
+                }
+                ClientboundGamePacket::DamageEvent(packet) => {
+                    let my_entity_id = bot.entity_component::<MinecraftEntityId>(bot.entity).0;
+                    if packet.entity_id.0 == my_entity_id {
+                        let attack_type_id = packet.source_type_id;
+                        let cause_id = packet.source_cause_id.to_owned();
+                        let mut direct_id = packet.source_direct_id.to_owned();
+                        let maybe_attack_type_identifier = if crate::OPTS.use_hardcoded_damage_types {
+                            if attack_type_id < DAMAGE_TYPES.len() as u32 {
+                                Some(ResourceLocation {
+                                    namespace: "minecraft".to_owned(),
+                                    path: DAMAGE_TYPES[attack_type_id as usize].to_owned(),
+                                })
+                            } else {
+                                None
+                            }
+                        } else {
+                            bot.with_registry_holder(|holder| {
+                                holder
+                                    .map
+                                    .get(&ResourceLocation::new("minecraft:damage_type"))
+                                    .unwrap()
+                                    .iter()
+                                    .enumerate()
+                                    .filter(|(index, (_identifier, _nbt_comp))| *index == attack_type_id as usize)
+                                    .map(|(_index, (identifier, _nbt_comp))| identifier.to_owned())
+                                    .find(|_| true)
+                            })
+                        };
+                        let attack_type = if let Some(attack_type_identifier) = maybe_attack_type_identifier {
+                            if attack_type_identifier.namespace == "minecraft" {
+                                attack_type_identifier.path.to_string()
+                            } else {
+                                attack_type_identifier.to_string()
+                            }
+                        } else {
+                            format!("TypeId {attack_type_id}")
+                        };
+                        if cause_id.0 == direct_id.0 {
+                            direct_id = OptionalEntityId(None);
+                        }
+
+                        let message: String = match (cause_id, direct_id) {
+                            (OptionalEntityId(Some(source_cause)), OptionalEntityId(Some(source_direct_id))) => {
+                                format!(
+                                    "Received {} damage by {} using {}",
+                                    attack_type,
+                                    entity_util::describe_by_id(&mut bot, source_cause as i32).unwrap_or_else(|_| "Err".to_string()),
+                                    entity_util::describe_by_id(&mut bot, source_direct_id as i32).unwrap_or_else(|_| "Err".to_string())
+                                )
+                            }
+                            (OptionalEntityId(Some(source_cause)), OptionalEntityId(None)) => {
+                                format!(
+                                    "Received {} damage by {}",
+                                    attack_type,
+                                    entity_util::describe_by_id(&mut bot, source_cause as i32).unwrap_or_else(|_| "Err".to_string())
+                                )
+                            }
+                            _ => {
+                                format!("Received {} damage", attack_type)
+                            }
+                        };
+                        info!("{}", message);
+                        *self.last_damage_event.lock() = Some((Instant::now(), message));
+                    }
+                }
+                _ => {}
+            },
+            Event::Death(packet) => {
+                if let Some(packet) = packet {
+                    info!("You died: {}", packet.message);
+                } else {
+                    info!("You died!");
+                }
+            }
+            Event::Tick => {
+                if self.interrupt_next_tick.fetch_and(false, Ordering::Relaxed) {
+                    self.interrupt(&mut bot, bot_state)?;
+                }
+                if self.queue_next_tick.fetch_and(false, Ordering::Relaxed)
+                    && let Some(queue_command) = &OPTS.queue_command
+                    && let Some(chat) = bot_state.chat.as_ref()
+                {
+                    chat.cmd(queue_command);
+                }
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+}
