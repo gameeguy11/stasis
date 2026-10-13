@@ -1,0 +1,5 @@
+[toolchain]
+# azalea needs nightly Rust. If the build fails with a simd-related error on the very latest nightly,
+# pin an older dated one here, e.g. channel = "nightly-2025-12-01"
+channel = "nightly-2026-03-01"
+profile = "minimal"

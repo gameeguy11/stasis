@@ -1,0 +1,10 @@
+/target
+/.idea/
+/sixb6t-config.json
+/.vscode/
+/sixb6t-config*.json
+/*.json.bak
+.cargo-ok
+Cargo.toml.orig
+.cargo_vcs_info.json
+*.log
