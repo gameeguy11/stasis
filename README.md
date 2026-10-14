@@ -5,9 +5,6 @@ A Minecraft bot for [6b6t.org](https://6b6t.org) that logs a cracked account in,
 Targets **Minecraft 1.21.11** and is built on [azalea](https://github.com/azalea-rs/azalea) 0.15.
 Uses a locally patched copy of `azalea-chat` (in `vendor/`) so 1.21.11 chat NBT that azalea 0.15 can't parse no longer drops the packet.
 
-## To do list:
-Adding kill aura,auto totem,auto eat...
-
 ## Community
 
 [![Discord](https://invidget.switchblade.xyz/fdHkyVYc8)](https://discord.gg/fdHkyVYc8)
