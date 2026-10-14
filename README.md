@@ -78,8 +78,8 @@ cargo run --release -- --config alt2.json --run
 | Walk timeout | Seconds before a walk phase is aborted. |
 | Stay connected after | Keep the bot connected once it has finished. |
 | Trapdoors | Any number of trapdoors, each with its own coordinates and chat trigger word. Add, edit or remove them in the submenu. |
-| Chat trigger user | Player whose chat messages are watched. Empty disables the trigger. |
-| Kill aura | Submenu: on/off, range, hostile mobs, neutral mobs, players, never-attack list, always-attack list. |
+| Chat trigger users | Players whose chat messages are watched. Add or remove them in the submenu; duplicates are refused. An empty list disables the trigger. |
+| Combat (totem/eat/aura) | Submenu: auto totem, auto eat and its food threshold, auto armor, auto best weapon, kill aura on/off, range, hostile mobs, neutral mobs, players, never-attack list, always-attack list. |
 
 ### Config file
 
@@ -98,6 +98,11 @@ cargo run --release -- --config alt2.json --run
     { "pos": [12, 64, -30], "word": "NOW" },
     { "pos": [14, 64, -30], "word": "LATER" }
   ],
+  "auto_totem": true,
+  "auto_eat": true,
+  "eat_below": 14,
+  "auto_armor": true,
+  "auto_weapon": true,
   "kill_aura": true,
   "kill_aura_range": 3.0,
   "kill_aura_hostiles": true,
@@ -108,7 +113,14 @@ cargo run --release -- --config alt2.json --run
 }
 ```
 
-Missing fields fall back to defaults. Old `trapdoor` / `trigger_word` fields are converted into `traps` automatically.
+Missing fields fall back to defaults. Old `trapdoor` / `trigger_word` fields are converted into `traps`, and an old `trigger_user` into `trigger_users`, automatically.
+
+### Combat helpers
+
+- `auto_totem` keeps a totem in the offhand.
+- `auto_eat` eats when the food level is at or below `eat_below` (0-20). Food comes from the hotbar or inventory; junk food is skipped.
+- `auto_armor` wears the best armor found in the inventory by material (netherite, diamond, iron, chainmail, gold, leather). An elytra in the chest slot is kept.
+- `auto_weapon` holds the best sword or axe before each kill aura attack.
 
 ### Kill aura filters
 
