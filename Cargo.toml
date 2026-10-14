@@ -1,76 +1,16 @@
 [package]
-<<<<<<< HEAD
-name = "stasis-bot"
-version = "0.10.0"
-edition = "2024"
-authors = ["EnderKill98"]
-
-=======
 name = "sixb6t-login-bot"
 version = "0.2.0"
 edition = "2024"
->>>>>>> 160cc57 (making it pub)
 
 [profile.dev]
 opt-level = 1
 [profile.release]
 opt-level = 3
-<<<<<<< HEAD
-#debug = true
-=======
->>>>>>> 160cc57 (making it pub)
 [profile.dev.package."*"]
 opt-level = 3
 
 [dependencies]
-<<<<<<< HEAD
-# CLI Opt parsing
-clap = { version = "4", features = ["derive"] }
-
-# Async Runtime
-tokio = "1"
-
-# Easy error handling
-anyhow = "1"
-
-# The amazing bot library!
-bevy_log = "0.15.2" # Whatever azalea is using
-#azalea = { git = "https://github.com/azalea-rs/azalea", rev = "8af265e4", default-features = false, features = [ "log", "serde" ] }
-#azalea = { path = "../azalea/azalea", default-features = false, features = [ "log", "serde" ] }
-azalea = { git = "https://github.com/EnderKill98/azalea", branch = "feature/1.21.4-inventory-backport", default-features = false, features = [ "log", "serde" ] }
-#azalea-viaversion = { git = "https://github.com/EnderKill98/azalea-viaversion.git", branch = "1.21.4" }
-simdnbt = "0.7" # Same version as azalea is using!
-
-parking_lot = { version = "0.12", features = [ "deadlock_detection" ] }
-
-# Logging
-tracing = "0.1"
-tracing-subscriber = "=0.3.19" # See https://github.com/tokio-rs/tracing/issues/3378 and https://github.com/tokio-rs/tracing/commit/4c52ca52
-logroller = "0.1"
-tracing-appender = "0.2"
-strip-ansi-escapes = "0.2"
-
-# Serde
-serde = { version = "=1.0.219", features = ["derive"] } # Why does mat use random private features of serde?
-serde_json = "1"
-
-once_cell = "1"
-
-uuid = { version = "1", features = [ "serde" ] }
-#tungstenite = "0.27"
-tokio-tungstenite = { version = "0.27", features = [ "native-tls" ] }
-futures-util = "0.3"
-
-async-trait = "0.1"
-chrono = { version = "0.4", features = [ "serde" ] }
-rand = "0.9"
-#reqwest = "0.12.20"
-openssl = { version = "*", features = [ "vendored" ] }
-reqwest = "0.12.23" # Fix common cross-compilation issue
-
-#axum = { version = "0.8.4", features = [ "macros" ] }
-regex = "1"
-=======
 azalea = "0.15"
 tokio = { version = "1", features = ["rt", "time"] }
 anyhow = "1"
@@ -87,4 +27,3 @@ pkcs8 = "=0.11.0-rc.11"
 
 [patch.crates-io]
 azalea-chat = { path = "vendor/azalea-chat" }
->>>>>>> 160cc57 (making it pub)

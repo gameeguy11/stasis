@@ -77,9 +77,9 @@ cargo run --release -- --config alt2.json --run
 | Wait after /login | Seconds to wait after logging in before walking. |
 | Walk timeout | Seconds before a walk phase is aborted. |
 | Stay connected after | Keep the bot connected once it has finished. |
-| Trapdoor (X Y Z) | Coordinates of the trapdoor to click, e.g. `12 64 -30`. Type `clear` to remove it. |
+| Trapdoors | Any number of trapdoors, each with its own coordinates and chat trigger word. Add, edit or remove them in the submenu. |
 | Chat trigger user | Player whose chat messages are watched. Empty disables the trigger. |
-| Chat trigger word | Word or phrase that makes the bot click the trapdoor. Empty disables the trigger. |
+| Kill aura | Submenu: on/off, range, hostile mobs, neutral mobs, players, never-attack list, always-attack list. |
 
 ### Config file
 
@@ -93,20 +93,32 @@ cargo run --release -- --config alt2.json --run
   "walk_delay": 3.0,
   "walk_timeout": 15.0,
   "stay": true,
-  "trapdoor": [12, 64, -30],
   "trigger_user": "SomePlayer",
-  "trigger_word": "NOW"
+  "traps": [
+    { "pos": [12, 64, -30], "word": "NOW" },
+    { "pos": [14, 64, -30], "word": "LATER" }
+  ],
+  "kill_aura": true,
+  "kill_aura_range": 3.0,
+  "kill_aura_hostiles": true,
+  "kill_aura_neutral": false,
+  "kill_aura_players": false,
+  "kill_aura_never": ["creeper", "SomeFriend"],
+  "kill_aura_always": ["iron_golem"]
 }
 ```
 
-`trapdoor` may be `null`. Missing fields fall back to defaults.
+Missing fields fall back to defaults. Old `trapdoor` / `trigger_word` fields are converted into `traps` automatically.
+
+### Kill aura filters
+
+- `kill_aura_never` wins over everything: mob types (`creeper`, `zombie`) or player names.
+- `kill_aura_always` attacks listed mob types even if they are not monsters, e.g. `wolf`.
+- Neutral mobs are endermen, piglins and zombified piglins. Players are only attacked when `kill_aura_players` is on and the name is not in `kill_aura_never`.
 
 ### Trapdoor trigger
 
-When a trapdoor is set, the bot clicks it when:
-
-- `trigger_user` sends a chat message containing `trigger_word` (case-insensitive, whole word only), or
-- you press **Enter** in the bot's console window.
+When `trigger_user` sends a chat message containing a trapdoor's word (case-insensitive, whole word only), the bot walks to within reach of that trapdoor and clicks it. Pressing **Enter** in the bot's console does the same for trapdoor 1. Walking only happens on the main server; elsewhere the bot just clicks.
 
 Repeated triggers within 1.5 seconds are ignored.
 

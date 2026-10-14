@@ -1,4 +1,4 @@
-use crate::config::Config;
+use crate::config::{Config, Trap};
 use anyhow::Result;
 use console::{Key, Term};
 use dialoguer::{Confirm, Input, Select, theme::ColorfulTheme};
@@ -88,13 +88,13 @@ fn parse_trapdoor(text: &str) -> Result<[i32; 3], String> {
     Ok(out)
 }
 
-fn ask_trapdoor(current: Option<[i32; 3]>) -> Result<Option<[i32; 3]>> {
+fn ask_trapdoor(label: &str, current: Option<[i32; 3]>) -> Result<Option<[i32; 3]>> {
     let hint = if current.is_some() {
-        "Trapdoor X Y Z (empty keeps current, type 'clear' to remove)"
+        format!("{label} X Y Z (empty keeps current, type 'clear' to remove)")
     } else {
-        "Trapdoor X Y Z (for example: 12 64 -30)"
+        format!("{label} X Y Z (for example: 12 64 -30)")
     };
-    let text = read_masked(hint, |v| {
+    let text = read_masked(&hint, |v| {
         let t = v.trim();
         if t.is_empty() || t.eq_ignore_ascii_case("clear") {
             return Ok(());
@@ -109,6 +109,102 @@ fn ask_trapdoor(current: Option<[i32; 3]>) -> Result<Option<[i32; 3]>> {
         return Ok(None);
     }
     Ok(parse_trapdoor(t).ok())
+}
+
+fn trap_label(i: usize, t: &Trap) -> String {
+    let word = if t.word.trim().is_empty() { "(no word)" } else { t.word.trim() };
+    format!("#{} ************  word: {}", i + 1, word)
+}
+
+fn trap_menu(cfg: &mut Config) -> Result<()> {
+    let theme = ColorfulTheme::default();
+    let mut selected = 0;
+    loop {
+        let mut items: Vec<String> = cfg.traps.iter().enumerate().map(|(i, t)| trap_label(i, t)).collect();
+        let count = items.len();
+        items.push("+ Add trapdoor".to_owned());
+        items.push("Back".to_owned());
+        let choice = Select::with_theme(&theme)
+            .with_prompt("Trapdoors - pick one to edit or remove")
+            .items(&items)
+            .default(selected.min(items.len() - 1))
+            .interact()?;
+        selected = choice;
+        if choice == count + 1 {
+            return Ok(());
+        }
+        if choice == count {
+            let Some(pos) = ask_trapdoor("New trapdoor", None)? else { continue };
+            let word = ask_optional("Chat word or phrase that walks to and clicks it (empty for none)", "")?;
+            cfg.traps.push(Trap { pos, word });
+            continue;
+        }
+        let action = Select::with_theme(&theme)
+            .with_prompt(trap_label(choice, &cfg.traps[choice]))
+            .items(&["Change coordinates", "Change trigger word", "Remove", "Back"])
+            .default(0)
+            .interact()?;
+        match action {
+            0 => {
+                if let Some(pos) = ask_trapdoor("Trapdoor", Some(cfg.traps[choice].pos))? {
+                    cfg.traps[choice].pos = pos;
+                }
+            }
+            1 => cfg.traps[choice].word = ask_optional("Trigger word or phrase (empty for none)", &cfg.traps[choice].word)?,
+            2 => {
+                cfg.traps.remove(choice);
+            }
+            _ => {}
+        }
+    }
+}
+
+fn ask_list(prompt: &str, current: &[String]) -> Result<Vec<String>> {
+    let text = ask_optional(prompt, &current.join(", "))?;
+    Ok(text.split(',').map(|s| s.trim().to_owned()).filter(|s| !s.is_empty()).collect())
+}
+
+fn yes_no(b: bool) -> &'static str {
+    if b { "yes" } else { "no" }
+}
+
+fn kill_aura_menu(cfg: &mut Config) -> Result<()> {
+    let theme = ColorfulTheme::default();
+    let mut selected = 0;
+    loop {
+        let items = vec![
+            format!("Auto totem              : {}", yes_no(cfg.auto_totem)),
+            format!("Auto eat                : {}", yes_no(cfg.auto_eat)),
+            format!("Eat when food is at/below: {} (max 20)", cfg.eat_below),
+            format!("Kill aura enabled       : {}", yes_no(cfg.kill_aura)),
+            format!("Range (blocks)          : {}", cfg.kill_aura_range),
+            format!("Attack hostile mobs     : {}", yes_no(cfg.kill_aura_hostiles)),
+            format!("Attack neutral mobs     : {} (enderman, piglin, zombified piglin)", yes_no(cfg.kill_aura_neutral)),
+            format!("Attack players          : {}", yes_no(cfg.kill_aura_players)),
+            format!("Never attack            : {}", if cfg.kill_aura_never.is_empty() { "(none)".to_owned() } else { cfg.kill_aura_never.join(", ") }),
+            format!("Always attack           : {}", if cfg.kill_aura_always.is_empty() { "(none)".to_owned() } else { cfg.kill_aura_always.join(", ") }),
+            "Back".to_owned(),
+        ];
+        let choice = Select::with_theme(&theme)
+            .with_prompt("Combat settings")
+            .items(&items)
+            .default(selected)
+            .interact()?;
+        selected = choice;
+        match choice {
+            0 => cfg.auto_totem = !cfg.auto_totem,
+            1 => cfg.auto_eat = !cfg.auto_eat,
+            2 => cfg.eat_below = ask_number("Eat when food level is at or below (0-20)", cfg.eat_below as f64)?.clamp(0.0, 20.0) as u32,
+            3 => cfg.kill_aura = !cfg.kill_aura,
+            4 => cfg.kill_aura_range = ask_number("Attack range in blocks", cfg.kill_aura_range)?,
+            5 => cfg.kill_aura_hostiles = !cfg.kill_aura_hostiles,
+            6 => cfg.kill_aura_neutral = !cfg.kill_aura_neutral,
+            7 => cfg.kill_aura_players = !cfg.kill_aura_players,
+            8 => cfg.kill_aura_never = ask_list("Never attack these (comma separated mob types like creeper, or player names)", &cfg.kill_aura_never)?,
+            9 => cfg.kill_aura_always = ask_list("Always attack these mob types (comma separated, like iron_golem, wolf)", &cfg.kill_aura_always)?,
+            _ => return Ok(()),
+        }
+    }
 }
 
 fn ask_register_mode(cfg: &mut Config) -> Result<()> {
@@ -181,9 +277,9 @@ pub fn run(path: &Path, skip_menu: bool) -> Result<Option<Config>> {
             format!("Wait after /login    : {} s", cfg.walk_delay),
             format!("Walk timeout         : {} s", cfg.walk_timeout),
             format!("Stay connected after : {}", if cfg.stay { "yes" } else { "no" }),
-            format!("Trapdoor (X Y Z)     : {}", if cfg.trapdoor.is_some() { "************" } else { "(not set)" }),
+            format!("Trapdoors            : {}", if cfg.traps.is_empty() { "(none)".to_owned() } else { format!("{} set", cfg.traps.len()) }),
             format!("Chat trigger user   : {}", if cfg.trigger_user.is_empty() { "(not set)" } else { cfg.trigger_user.as_str() }),
-            format!("Chat trigger word   : {}", if cfg.trigger_word.is_empty() { "(not set)" } else { cfg.trigger_word.as_str() }),
+            format!("Combat (totem/eat/aura): {}", if cfg.auto_totem || cfg.auto_eat || cfg.kill_aura { "on" } else { "off" }),
             "Redo setup questions".to_owned(),
             "Quit".to_owned(),
         ];
@@ -210,9 +306,9 @@ pub fn run(path: &Path, skip_menu: bool) -> Result<Option<Config>> {
             5 => cfg.walk_delay = ask_number("Seconds to wait after /login", cfg.walk_delay)?,
             6 => cfg.walk_timeout = ask_number("Seconds before a walk is aborted", cfg.walk_timeout)?,
             7 => cfg.stay = Confirm::with_theme(&theme).with_prompt("Stay connected when finished?").default(cfg.stay).interact()?,
-            8 => cfg.trapdoor = ask_trapdoor(cfg.trapdoor)?,
+            8 => trap_menu(&mut cfg)?,
             9 => cfg.trigger_user = ask_optional("Username to watch in chat (empty to turn off)", &cfg.trigger_user)?,
-            10 => cfg.trigger_word = ask_optional("Word or phrase that makes the bot click (empty to turn off)", &cfg.trigger_word)?,
+            10 => kill_aura_menu(&mut cfg)?,
             11 => wizard(&mut cfg)?,
             _ => {
                 cfg.save(path)?;
