@@ -28,10 +28,14 @@ pub struct Config {
     pub trapdoor2: Option<[i32; 3]>,
     #[serde(skip_serializing_if = "String::is_empty")]
     pub trigger_word2: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
     pub trigger_user: String,
+    pub trigger_users: Vec<String>,
     pub traps: Vec<Trap>,
     pub auto_totem: bool,
     pub auto_eat: bool,
+    pub auto_armor: bool,
+    pub auto_weapon: bool,
     pub kill_aura: bool,
     pub eat_below: u32,
     pub kill_aura_range: f64,
@@ -68,9 +72,12 @@ impl Default for Config {
             trapdoor2: None,
             trigger_word2: String::new(),
             trigger_user: String::new(),
+            trigger_users: Vec::new(),
             traps: Vec::new(),
             auto_totem: true,
             auto_eat: true,
+            auto_armor: true,
+            auto_weapon: true,
             kill_aura: true,
             eat_below: 14,
             kill_aura_range: 3.0,
@@ -103,6 +110,19 @@ impl Config {
             let word = std::mem::take(&mut self.trigger_word2);
             self.traps.push(Trap { pos, word });
         }
+        let mut seen: Vec<String> = Vec::new();
+        self.trigger_users.retain(|u| {
+            let key = u.trim().to_lowercase();
+            if key.is_empty() || seen.contains(&key) {
+                return false;
+            }
+            seen.push(key);
+            true
+        });
+        let legacy_user = std::mem::take(&mut self.trigger_user);
+        if !legacy_user.trim().is_empty() && !self.trigger_users.iter().any(|u| u.eq_ignore_ascii_case(legacy_user.trim())) {
+            self.trigger_users.push(legacy_user.trim().to_owned());
+        }
         self.trigger_word.clear();
         self.trigger_word2.clear();
     }
@@ -127,7 +147,7 @@ impl Config {
     }
 
     pub fn trigger_text(&self) -> String {
-        let user = self.trigger_user.trim();
+        let users = self.trigger_users.iter().map(|u| u.trim()).filter(|u| !u.is_empty()).collect::<Vec<_>>().join("/");
         let words: Vec<String> = self
             .traps
             .iter()
@@ -135,10 +155,10 @@ impl Config {
             .filter(|(_, t)| !t.word.trim().is_empty())
             .map(|(i, t)| format!("\"{}\" -> trapdoor {}", t.word.trim(), i + 1))
             .collect();
-        if user.is_empty() || words.is_empty() {
+        if users.is_empty() || words.is_empty() {
             "(off)".to_owned()
         } else {
-            format!("when {} says {}", user, words.join(" or "))
+            format!("when {} says {}", users, words.join(" or "))
         }
     }
 

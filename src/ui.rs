@@ -159,6 +159,40 @@ fn trap_menu(cfg: &mut Config) -> Result<()> {
     }
 }
 
+fn user_menu(cfg: &mut Config) -> Result<()> {
+    let theme = ColorfulTheme::default();
+    let mut selected = 0;
+    loop {
+        let mut items: Vec<String> = cfg.trigger_users.iter().map(|n| format!("{n}  (select to remove)")).collect();
+        let count = items.len();
+        items.push("+ Add user".to_owned());
+        items.push("Back".to_owned());
+        let choice = Select::with_theme(&theme)
+            .with_prompt("Chat trigger users")
+            .items(&items)
+            .default(selected.min(items.len() - 1))
+            .interact()?;
+        selected = choice;
+        if choice == count + 1 {
+            return Ok(());
+        }
+        if choice < count {
+            let name = cfg.trigger_users.remove(choice);
+            println!("Removed {name}.");
+            continue;
+        }
+        let name = ask_text("Username to add", "")?;
+        if name.is_empty() {
+            continue;
+        }
+        if cfg.trigger_users.iter().any(|u| u.trim().eq_ignore_ascii_case(&name)) {
+            println!("{name} is already in the list.");
+        } else {
+            cfg.trigger_users.push(name);
+        }
+    }
+}
+
 fn ask_list(prompt: &str, current: &[String]) -> Result<Vec<String>> {
     let text = ask_optional(prompt, &current.join(", "))?;
     Ok(text.split(',').map(|s| s.trim().to_owned()).filter(|s| !s.is_empty()).collect())
@@ -176,6 +210,8 @@ fn kill_aura_menu(cfg: &mut Config) -> Result<()> {
             format!("Auto totem              : {}", yes_no(cfg.auto_totem)),
             format!("Auto eat                : {}", yes_no(cfg.auto_eat)),
             format!("Eat when food is at/below: {} (max 20)", cfg.eat_below),
+            format!("Auto armor              : {}", yes_no(cfg.auto_armor)),
+            format!("Auto best weapon        : {}", yes_no(cfg.auto_weapon)),
             format!("Kill aura enabled       : {}", yes_no(cfg.kill_aura)),
             format!("Range (blocks)          : {}", cfg.kill_aura_range),
             format!("Attack hostile mobs     : {}", yes_no(cfg.kill_aura_hostiles)),
@@ -195,13 +231,15 @@ fn kill_aura_menu(cfg: &mut Config) -> Result<()> {
             0 => cfg.auto_totem = !cfg.auto_totem,
             1 => cfg.auto_eat = !cfg.auto_eat,
             2 => cfg.eat_below = ask_number("Eat when food level is at or below (0-20)", cfg.eat_below as f64)?.clamp(0.0, 20.0) as u32,
-            3 => cfg.kill_aura = !cfg.kill_aura,
-            4 => cfg.kill_aura_range = ask_number("Attack range in blocks", cfg.kill_aura_range)?,
-            5 => cfg.kill_aura_hostiles = !cfg.kill_aura_hostiles,
-            6 => cfg.kill_aura_neutral = !cfg.kill_aura_neutral,
-            7 => cfg.kill_aura_players = !cfg.kill_aura_players,
-            8 => cfg.kill_aura_never = ask_list("Never attack these (comma separated mob types like creeper, or player names)", &cfg.kill_aura_never)?,
-            9 => cfg.kill_aura_always = ask_list("Always attack these mob types (comma separated, like iron_golem, wolf)", &cfg.kill_aura_always)?,
+            3 => cfg.auto_armor = !cfg.auto_armor,
+            4 => cfg.auto_weapon = !cfg.auto_weapon,
+            5 => cfg.kill_aura = !cfg.kill_aura,
+            6 => cfg.kill_aura_range = ask_number("Attack range in blocks", cfg.kill_aura_range)?,
+            7 => cfg.kill_aura_hostiles = !cfg.kill_aura_hostiles,
+            8 => cfg.kill_aura_neutral = !cfg.kill_aura_neutral,
+            9 => cfg.kill_aura_players = !cfg.kill_aura_players,
+            10 => cfg.kill_aura_never = ask_list("Never attack these (comma separated mob types like creeper, or player names)", &cfg.kill_aura_never)?,
+            11 => cfg.kill_aura_always = ask_list("Always attack these mob types (comma separated, like iron_golem, wolf)", &cfg.kill_aura_always)?,
             _ => return Ok(()),
         }
     }
@@ -278,8 +316,8 @@ pub fn run(path: &Path, skip_menu: bool) -> Result<Option<Config>> {
             format!("Walk timeout         : {} s", cfg.walk_timeout),
             format!("Stay connected after : {}", if cfg.stay { "yes" } else { "no" }),
             format!("Trapdoors            : {}", if cfg.traps.is_empty() { "(none)".to_owned() } else { format!("{} set", cfg.traps.len()) }),
-            format!("Chat trigger user   : {}", if cfg.trigger_user.is_empty() { "(not set)" } else { cfg.trigger_user.as_str() }),
-            format!("Combat (totem/eat/aura): {}", if cfg.auto_totem || cfg.auto_eat || cfg.kill_aura { "on" } else { "off" }),
+            format!("Chat trigger users  : {}", if cfg.trigger_users.is_empty() { "(not set)".to_owned() } else { cfg.trigger_users.join(", ") }),
+            format!("Combat (totem/eat/aura): {}", if cfg.auto_totem || cfg.auto_eat || cfg.auto_armor || cfg.auto_weapon || cfg.kill_aura { "on" } else { "off" }),
             "Redo setup questions".to_owned(),
             "Quit".to_owned(),
         ];
@@ -307,7 +345,7 @@ pub fn run(path: &Path, skip_menu: bool) -> Result<Option<Config>> {
             6 => cfg.walk_timeout = ask_number("Seconds before a walk is aborted", cfg.walk_timeout)?,
             7 => cfg.stay = Confirm::with_theme(&theme).with_prompt("Stay connected when finished?").default(cfg.stay).interact()?,
             8 => trap_menu(&mut cfg)?,
-            9 => cfg.trigger_user = ask_optional("Username to watch in chat (empty to turn off)", &cfg.trigger_user)?,
+            9 => user_menu(&mut cfg)?,
             10 => kill_aura_menu(&mut cfg)?,
             11 => wizard(&mut cfg)?,
             _ => {

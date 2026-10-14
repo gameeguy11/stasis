@@ -694,12 +694,11 @@ fn split_chat(text: &str) -> Option<(String, String)> {
 }
 
 fn chat_triggers(text: &str) -> Option<usize> {
-    let user = cfg().trigger_user.trim().to_lowercase();
-    if user.is_empty() {
+    if cfg().trigger_users.is_empty() {
         return None;
     }
     let (sender, message) = split_chat(text)?;
-    if sender.to_lowercase() != user {
+    if !cfg().trigger_users.iter().any(|u| u.trim().eq_ignore_ascii_case(&sender)) {
         return None;
     }
     let message = message.to_lowercase();

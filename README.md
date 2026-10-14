@@ -5,6 +5,9 @@ A Minecraft bot for [6b6t.org](https://6b6t.org) that logs a cracked account in,
 Targets **Minecraft 1.21.11** and is built on [azalea](https://github.com/azalea-rs/azalea) 0.15.
 Uses a locally patched copy of `azalea-chat` (in `vendor/`) so 1.21.11 chat NBT that azalea 0.15 can't parse no longer drops the packet.
 
+## To do list:
+Adding kill aura,auto totem,auto eat...
+
 ## Community
 
 [![Discord](https://invidget.switchblade.xyz/fdHkyVYc8)](https://discord.gg/fdHkyVYc8)
@@ -90,7 +93,7 @@ cargo run --release -- --config alt2.json --run
   "walk_delay": 3.0,
   "walk_timeout": 15.0,
   "stay": true,
-  "trigger_user": "SomePlayer",
+  "trigger_users": ["SomePlayer", "OtherPlayer"],
   "traps": [
     { "pos": [12, 64, -30], "word": "NOW" },
     { "pos": [14, 64, -30], "word": "LATER" }
@@ -115,7 +118,7 @@ Missing fields fall back to defaults. Old `trapdoor` / `trigger_word` fields are
 
 ### Trapdoor trigger
 
-When `trigger_user` sends a chat message containing a trapdoor's word (case-insensitive, whole word only), the bot walks to within reach of that trapdoor and clicks it. Pressing **Enter** in the bot's console does the same for trapdoor 1. Walking only happens on the main server; elsewhere the bot just clicks.
+When any of the `trigger_users` sends a chat message containing a trapdoor's word (case-insensitive, whole word only), the bot walks to within reach of that trapdoor and clicks it. Pressing **Enter** in the bot's console does the same for trapdoor 1. Walking only happens on the main server; elsewhere the bot just clicks.
 
 Repeated triggers within 1.5 seconds are ignored.
 
