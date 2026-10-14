@@ -81,53 +81,6 @@ cargo run --release -- --config alt2.json --run
 | Chat trigger users | Players whose chat messages are watched. Add or remove them in the submenu; duplicates are refused. An empty list disables the trigger. |
 | Combat (totem/eat/aura) | Submenu: auto totem, auto eat and its food threshold, auto armor, auto best weapon, kill aura on/off, range, hostile mobs, neutral mobs, players, never-attack list, always-attack list. |
 
-### Config file
-
-```json
-{
-  "servers": ["alt.6b6t.org", "alt2.6b6t.org"],
-  "username": "YourAccount",
-  "password": "your-password",
-  "force_register": false,
-  "no_register": false,
-  "walk_delay": 3.0,
-  "walk_timeout": 15.0,
-  "stay": true,
-  "trigger_users": ["SomePlayer", "OtherPlayer"],
-  "traps": [
-    { "pos": [12, 64, -30], "word": "NOW" },
-    { "pos": [14, 64, -30], "word": "LATER" }
-  ],
-  "auto_totem": true,
-  "auto_eat": true,
-  "eat_below": 14,
-  "auto_armor": true,
-  "auto_weapon": true,
-  "kill_aura": true,
-  "kill_aura_range": 3.0,
-  "kill_aura_hostiles": true,
-  "kill_aura_neutral": false,
-  "kill_aura_players": false,
-  "kill_aura_never": ["creeper", "SomeFriend"],
-  "kill_aura_always": ["iron_golem"]
-}
-```
-
-Missing fields fall back to defaults. Old `trapdoor` / `trigger_word` fields are converted into `traps`, and an old `trigger_user` into `trigger_users`, automatically.
-
-### Combat helpers
-
-- `auto_totem` keeps a totem in the offhand.
-- `auto_eat` eats when the food level is at or below `eat_below` (0-20). Food comes from the hotbar or inventory; junk food is skipped.
-- `auto_armor` wears the best armor found in the inventory by material (netherite, diamond, iron, chainmail, gold, leather). An elytra in the chest slot is kept.
-- `auto_weapon` holds the best sword or axe before each kill aura attack.
-
-### Kill aura filters
-
-- `kill_aura_never` wins over everything: mob types (`creeper`, `zombie`) or player names.
-- `kill_aura_always` attacks listed mob types even if they are not monsters, e.g. `wolf`.
-- Neutral mobs are endermen, piglins and zombified piglins. Players are only attacked when `kill_aura_players` is on and the name is not in `kill_aura_never`.
-
 ### Trapdoor trigger
 
 When any of the `trigger_users` sends a chat message containing a trapdoor's word (case-insensitive, whole word only), the bot walks to within reach of that trapdoor and clicks it. Pressing **Enter** in the bot's console does the same for trapdoor 1. Walking only happens on the main server; elsewhere the bot just clicks.
